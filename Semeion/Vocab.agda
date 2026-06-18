@@ -20,9 +20,10 @@ module Semeion.Vocab where
 
 open import Semeion.Signal
 
-open import Data.Nat            using (ℕ; _+_; _≤_)
+open import Data.Nat            using (ℕ; _+_; _≤_; NonZero)
 open import Data.Nat.Properties using (m≤m+n)
 open import Data.Maybe          using (Maybe; just; nothing)
+open import Data.Product        using (_×_; _,_)
 open import Relation.Binary.PropositionalEquality using (_≡_; _≢_; refl)
 
 -- ── Sotto quale regime il codominio è ciò che dichiara ─────────────────
@@ -49,8 +50,10 @@ nowReading o = displayAt now (Observable.signal o)
 
 -- SLI: good su (good+bad). `good ≤ good+bad` è `m≤m+n`: 0 ≤ valore ≤ 1 è
 -- DIMOSTRATO dalla decomposizione, non assunto. Nessun input empirico.
-sli : (good bad : ℕ) → Observable
-sli good bad = obs (mkSignal (ratio (mkRatio good (good + bad) (m≤m+n good bad))) point)
+-- L'unico vincolo nuovo (su ℚ): almeno UNA osservazione — `good+bad ≠ 0`.
+-- Zero osservazioni non sono "SLI = 0/0": non sono un SLI affatto. Onesto.
+sli : (good bad : ℕ) → ⦃ NonZero (good + bad) ⦄ → Observable
+sli good bad = obs (mkSignal (ratio (inUnit good (good + bad) (m≤m+n good bad))) point)
                    emergent
 
 -- level / rate / latencyQuantile: magnitudi SENZA fondoscala intrinseco.
@@ -84,9 +87,12 @@ burnRate = obs (mkSignal flow point) emergent
 --   • `nothing`   — tetto soft/elastico, nessuna garanzia ⇒ `flow`.
 --                   La gauge è RIFIUTATA: un arco avrebbe un fondoscala che
 --                   il sistema può sforare. Solo un numero è onesto.
-saturation : (usage capacity : ℕ) → Maybe (usage ≤ capacity) → Observable
-saturation usage capacity (just hyp) =
-  obs (mkSignal (ratio (mkRatio usage capacity hyp)) point) fidelity
+-- Il testimone del tetto rigido include `NonZero capacity`: un tetto vero è
+-- positivo (capacità 0 non è un cap, è una risorsa degenere). Così il ramo
+-- elastico `nothing` non paga nulla — la positività vive solo nella claim.
+saturation : (usage capacity : ℕ) → Maybe (NonZero capacity × usage ≤ capacity) → Observable
+saturation usage capacity (just (nz , hyp)) =
+  obs (mkSignal (ratio (inUnit usage capacity ⦃ nz ⦄ hyp)) point) fidelity
 saturation usage capacity nothing =
   obs (mkSignal flow point) emergent
 
@@ -102,9 +108,9 @@ saturation usage capacity nothing =
 --   • `nothing`   — budget sforato / nessuna garanzia ⇒ `flow`. La gauge è
 --                   RIFIUTATA (un arco fissato a 0/1 maschera "1.4× budget");
 --                   solo un numero è onesto.
-errorBudget : (bad budget : ℕ) → Maybe (bad ≤ budget) → Observable
-errorBudget bad budget (just hyp) =
-  obs (mkSignal (ratio (mkRatio bad budget hyp)) point) fidelity
+errorBudget : (bad budget : ℕ) → Maybe (NonZero budget × bad ≤ budget) → Observable
+errorBudget bad budget (just (nz , hyp)) =
+  obs (mkSignal (ratio (inUnit bad budget ⦃ nz ⦄ hyp)) point) fidelity
 errorBudget bad budget nothing =
   obs (mkSignal flow point) emergent
 
@@ -113,10 +119,10 @@ errorBudget bad budget nothing =
 -- ╚══════════════════════════════════════════════════════════════════════╝
 
 -- ── SLI: arco fedele, INCONDIZIONATO (regime emergente) ────────────────
-sliIsArc     : ∀ good bad → nowReading (sli good bad) ≡ forced arc
+sliIsArc     : ∀ good bad ⦃ _ : NonZero (good + bad) ⦄ → nowReading (sli good bad) ≡ forced arc
 sliIsArc _ _ = refl
 
-sliEmergent  : ∀ good bad → Observable.regime (sli good bad) ≡ emergent
+sliEmergent  : ∀ good bad ⦃ _ : NonZero (good + bad) ⦄ → Observable.regime (sli good bad) ≡ emergent
 sliEmergent _ _ = refl
 
 -- ── saturation col tetto rigido: arco, ma regime FEDELTÀ (condizionato) ─

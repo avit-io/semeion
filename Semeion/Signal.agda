@@ -21,34 +21,82 @@
 
 module Semeion.Signal where
 
-open import Data.Nat     using (ℕ; _≤_; z≤n; s≤s)
+open import Data.Nat     as ℕ using (ℕ; suc; z≤n; s≤s)
 open import Data.Fin     using (Fin)
 open import Data.List    using (List; _∷_; [])
 open import Data.Product using (∃-syntax; _,_)
-open import Relation.Binary.PropositionalEquality using (_≡_; _≢_; refl)
+open import Data.Integer as ℤ using (ℤ; +_)
+import      Data.Integer.Properties as ℤ
+open import Data.Rational using (ℚ; 0ℚ; 1ℚ; _/_; _≤_; toℚᵘ)
+import      Data.Rational.Properties as ℚ
+open import Data.Rational.Unnormalised as ℚᵘ using (mkℚᵘ)
+import      Data.Rational.Unnormalised.Properties as ℚᵘ
+open import Relation.Binary.PropositionalEquality
+  using (_≡_; _≢_; refl; sym; subst₂)
 
 -- ── Il valore bounded è una PROVA, non una config ──────────────────────
--- Un rapporto good/total con good ≤ total. La sua appartenenza a [0,1] è
--- il TEOREMA `num ≤ den`, non un campo `min/max` da indovinare. Non si può
--- marcare bounded qualcosa senza esibire il testimone.
-record Ratio : Set where
-  constructor mkRatio
+-- Un razionale `v` dentro un intervallo NOTO `[lo,hi]`, con i due testimoni
+-- `lo ≤ v` e `v ≤ hi` INCORPORATI. La sua appartenenza all'intervallo non è
+-- un campo `min/max` da indovinare: è esibita. Non si può marcare bounded
+-- qualcosa senza il testimone. Generalizza il vecchio rapporto good/total
+-- ([0,1]) a un fondoscala qualsiasi su ℚ (pool, code, °C, %>1, cap noti).
+record Bounded : Set where
+  constructor mkBounded
   field
-    num den : ℕ
-    bound   : num ≤ den
+    lo hi v : ℚ
+    lo≤v    : lo ≤ v
+    v≤hi    : v ≤ hi
 
--- Esempio: un SLI 1/2. Il `bound` È la dimostrazione 0 ≤ valore ≤ 1.
--- (Una magnitudo unbounded — un rate, una latenza in ms — non ha nulla da
---  mettere qui: per questo finisce in `flow`, non in `ratio`.)
-exampleSLI : Ratio
-exampleSLI = mkRatio 1 2 (s≤s z≤n)
+-- `Ratio` resta un nome per il caso [0,1] (compat. a valle: Penelope lo cita).
+Ratio : Set
+Ratio = Bounded
+
+-- ── Il caso [0,1] EMERGE da n ≤ d (regime 1) ───────────────────────────
+-- `inUnit n d` con `n ≤ d` (e `d ≠ 0`: zero osservazioni = nessuna lettura,
+-- e su ℚ `0/0` non esiste — il vincolo è onesto, non un artificio) dà il
+-- valore `n/d` nell'unità [0,1]. I due bound NON si stipulano: si provano
+-- al livello non-normalizzato, dove l'ordine È la moltiplicazione incrociata
+-- su ℤ, e si trasportano. È il vecchio `m≤m+n` dell'SLI, ora su ℚ.
+private
+  unit-lo : ∀ (n d : ℕ) → 0ℚ ≤ (+ n) / suc d
+  unit-lo n d = ℚ.toℚᵘ-cancel-≤ (ℚᵘ.≤-respʳ-≃ (ℚᵘ.≃-sym bridge) g)
+    where
+      Q = mkℚᵘ (+ n) d
+      bridge : toℚᵘ ((+ n) / suc d) ℚᵘ.≃ Q
+      bridge = ℚ.toℚᵘ-fromℚᵘ Q
+      g : toℚᵘ 0ℚ ℚᵘ.≤ Q
+      g = ℚᵘ.*≤* le
+        where le : (+ 0) ℤ.* (+ suc d) ℤ.≤ (+ n) ℤ.* (+ 1)
+              le = subst₂ ℤ._≤_ (sym (ℤ.*-zeroˡ (+ suc d)))
+                                (sym (ℤ.*-identityʳ (+ n))) (ℤ.+≤+ z≤n)
+
+  unit-hi : ∀ (n d : ℕ) → n ℕ.≤ suc d → ((+ n) / suc d) ≤ 1ℚ
+  unit-hi n d n≤sd = ℚ.toℚᵘ-cancel-≤ (ℚᵘ.≤-respˡ-≃ (ℚᵘ.≃-sym bridge) g)
+    where
+      Q = mkℚᵘ (+ n) d
+      bridge : toℚᵘ ((+ n) / suc d) ℚᵘ.≃ Q
+      bridge = ℚ.toℚᵘ-fromℚᵘ Q
+      g : Q ℚᵘ.≤ toℚᵘ 1ℚ
+      g = ℚᵘ.*≤* le
+        where le : (+ n) ℤ.* (+ 1) ℤ.≤ (+ 1) ℤ.* (+ suc d)
+              le = subst₂ ℤ._≤_ (sym (ℤ.*-identityʳ (+ n)))
+                                (sym (ℤ.*-identityˡ (+ suc d))) (ℤ.+≤+ n≤sd)
+
+inUnit : (n d : ℕ) → ⦃ ℕ.NonZero d ⦄ → n ℕ.≤ d → Bounded
+inUnit n (suc d) n≤d = mkBounded 0ℚ 1ℚ ((+ n) / suc d) (unit-lo n d) (unit-hi n d n≤d)
+
+-- Esempio: un SLI 1/2 nell'unità [0,1]. I due bound SONO le dimostrazioni
+-- 0 ≤ valore ≤ 1. (Una magnitudo unbounded — rate, latenza-ms — non ha nulla
+--  da mettere qui: per questo finisce in `flow`, non in `ratio`.)
+exampleSLI : Bounded
+exampleSLI = inUnit 1 2 (s≤s z≤n)
 
 -- ── Codominio: la struttura intrinseca del valore ──────────────────────
 data Codomain : Set where
   flow  : Codomain                 -- magnitudo continua SENZA fondoscala
                                    --   intrinseco: rate, count, latenza-ms
-  ratio : Ratio → Codomain         -- continua, bounded [0,1], testimone
-                                   --   incorporato: SLI, saturazione, budget
+  ratio : Bounded → Codomain       -- continua, bounded [lo,hi], testimoni
+                                   --   incorporati: SLI, saturazione, budget
   state : (n : ℕ) → Fin n → Codomain  -- categoriale: n stati, quello corrente
 
 -- ── Indice: scalare singolo o famiglia etichettata ─────────────────────
