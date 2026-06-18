@@ -70,7 +70,8 @@ Signal  ──teorema──▶  Display  ──adapter──▶  PanelKind  ─�
 
 `Display` è la primitiva **geometrica**, nominata da *cos'è*, non da come la
 chiama Grafana. Il nome del pannello è l'epifenomeno di un epifenomeno.
-**semeion dipende solo da `prometea`: non importa Penelope** (resta a monte).
+**semeion è una radice: dipende solo da `standard-library`, non importa
+Penelope** (resta a monte — l'apeiron dei segnali).
 
 ```agda
 data Display : Set where
@@ -221,7 +222,7 @@ devShells.x86_64-linux.default =
 # mio-progetto.agda-lib
 name: mio-progetto
 include: .
-depend: standard-library prometea semeion
+depend: standard-library semeion
 ```
 
 ### Come sviluppatore di semeion
@@ -229,7 +230,7 @@ depend: standard-library prometea semeion
 ```bash
 git clone https://github.com/avit-io/semeion
 cd semeion
-nix develop                  # Agda 2.8 + stdlib + prometea
+nix develop                  # Agda 2.8 + stdlib (semeion è una radice)
 agda Semeion/Signal.agda     # typecheck completo: 0 postulate, --safe --without-K
 ```
 
@@ -244,7 +245,7 @@ semeion/
 │   │                    #   displayAt (il teorema) · le prove (SLI, rifiuto p99)
 │   └── Vocab.agda       # vocabolario SRE: level/sli/rate/latency/burn ·
 │                        #   saturation & error-budget come REGIME 2 (fedeltà)
-├── semeion.agda-lib     # depend: standard-library prometea
+├── semeion.agda-lib     # depend: standard-library (radice: zero dep d'ecosistema)
 └── flake.nix            # packages.lib · lib.mkShell · devShells.default
 ```
 
@@ -252,19 +253,41 @@ semeion/
 
 ## Relazione con l'ecosistema
 
+Due ordini, da non confondere.
+
+**Ordine concettuale** — cosa è prima *nel significato*. semeion è l'**ἄπειρον
+dei segnali**: la natura indistinta (bounded? flow? categoriale? istante o
+traiettoria?) da cui si separano le forme determinate. penelope, alla
+convergenza, è **la tessitrice**.
+
 ```
-Prometea.Core    ← Model · PromType · Denote   (il modello del valore)
-     │
-     ▼
-Semeion.Signal   ← Signal · Display · Faithful · displayAt  (questo repo)
-     │
-     ▼
-Penelope         ← il render: mappa Display → PanelKind → JSON Grafana
+            semeion  ← l'apeiron: la natura del segnale
+               │  (da cui si separano le forme determinate)
+   ┌───────────┼───────────┬───────────┐
+   ▼           ▼           ▼            ▼
+prometea     henql      loquel      agdovana
+(valore)   (PromQL)   (log)       (allarmi)
+   └───────────┴─────┬─────┴────────────┘
+                     ▼
+                 penelope  ← la tessitrice: lega Display ⊗ Expr ⊗ Pipe
 ```
 
-semeion sta **fra** prometea (a monte, il significato del valore) e Penelope
-(a valle, il render). Non importa Penelope: espone `Display`, e l'adapter
-`Display → PanelKind` vive in Penelope — coerente con "JSON epifenomeno".
+**Ordine di dipendenza** — chi `import`-a chi. NON è un diamante a un apice:
+prometea/henql/loquel sono valore e sintassi, non hanno bisogno della
+geometria. La forma reale è una **foresta di radici** (solo `standard-library`:
+`prometea`, `loquel`, **`semeion`**) che converge su penelope.
+
+```
+radici:   prometea     loquel     semeion        (depend: standard-library)
+             │ └─henql    │           │
+             ▼    ▼       ▼           │
+           agdovana    penelope ◀─────┘
+                       (depend: … prometea henql loquel semeion)
+```
+
+semeion non importa Penelope: espone `Display`, e l'adapter
+`Display → PanelKind` — col ponte `Signal ↔ Expr` — vive in Penelope, la
+tessitrice. Coerente con "JSON epifenomeno": semeion resta geometria pura.
 
 ---
 

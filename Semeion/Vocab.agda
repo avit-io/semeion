@@ -90,9 +90,18 @@ saturation usage capacity (just hyp) =
 saturation usage capacity nothing =
   obs (mkSignal flow point) emergent
 
--- error-budget consumato = bad / budget. Stessa natura di saturation: in
--- [0,1] SOLO finché non hai sforato il budget (`bad ≤ budget` è
--- falsificabile — puoi bruciare più del consentito). REGIME 2.
+-- error-budget consumato = bad / budget (la frazione rimanente è il duale
+-- 1 − questa). È il regime-2 più AFFILATO: un budget è FATTO per essere
+-- sforabile — `bad ≤ budget` non è solo falsificabile, è di routine
+-- falsificato (è il senso stesso di avere un budget). La boundedness [0,1]
+-- è quindi la scommessa "non l'ho ancora bruciato", non un teorema.
+--
+--   • `just hyp`  — entro budget ⇒ `ratio`, REGIME 2: l'arco emerge ma la
+--                   sua fedeltà è condizionata a `hyp`, che il sistema viola
+--                   appena bruci più del consentito.
+--   • `nothing`   — budget sforato / nessuna garanzia ⇒ `flow`. La gauge è
+--                   RIFIUTATA (un arco fissato a 0/1 maschera "1.4× budget");
+--                   solo un numero è onesto.
 errorBudget : (bad budget : ℕ) → Maybe (bad ≤ budget) → Observable
 errorBudget bad budget (just hyp) =
   obs (mkSignal (ratio (mkRatio bad budget hyp)) point) fidelity
@@ -124,6 +133,31 @@ satSoftIsNumber _ _ = refl
 
 satSoftNotArc   : ∀ u c → nowReading (saturation u c nothing) ≢ forced arc
 satSoftNotArc _ _ ()
+
+-- ── error-budget: regime-2 completo (il più affilato) ─────────────────
+-- Entro budget: stessa FORMA dell'SLI (un arco), ma…
+budgetWithinIsArc : ∀ bad budget hyp
+  → nowReading (errorBudget bad budget (just hyp)) ≡ forced arc
+budgetWithinIsArc _ _ _ = refl
+
+budgetFidelity : ∀ bad budget hyp
+  → Observable.regime (errorBudget bad budget (just hyp)) ≡ fidelity
+budgetFidelity _ _ _ = refl
+
+-- …la sua boundedness NON è un teorema (contrasto diretto con `sliEmergent`):
+-- è fedeltà a un fatto che il sistema può violare.
+budgetNotEmergent : ∀ bad budget hyp
+  → Observable.regime (errorBudget bad budget (just hyp)) ≢ emergent
+budgetNotEmergent _ _ _ ()
+
+-- Budget sforato (nessuna garanzia): unbounded ⇒ numero, gauge RIFIUTATA.
+budgetBlownIsNumber : ∀ bad budget
+  → nowReading (errorBudget bad budget nothing) ≡ forced number
+budgetBlownIsNumber _ _ = refl
+
+budgetBlownNotArc : ∀ bad budget
+  → nowReading (errorBudget bad budget nothing) ≢ forced arc
+budgetBlownNotArc _ _ ()
 
 -- ── burn-rate / latenza p99: magnitudi unbounded ⇒ MAI un arco ─────────
 burnNotArc    : nowReading burnRate ≢ forced arc
