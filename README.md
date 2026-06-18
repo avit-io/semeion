@@ -85,26 +85,29 @@ data Display : Set where
 
 ### Il bounded è una PROVA, non una config
 
-Un valore in [0,1] è un rapporto `good/total` con `good ≤ total`. La sua
-appartenenza all'intervallo è il **teorema** `num ≤ den`, non un campo
-`min/max` da indovinare. Non puoi marcare *bounded* qualcosa senza esibire il
-testimone:
+Un valore bounded è un razionale `v` dentro un intervallo **noto** `[lo,hi]`,
+con i due testimoni `lo ≤ v` e `v ≤ hi` **incorporati** — non un campo
+`min/max` da indovinare. Non puoi marcare *bounded* qualcosa senza esibirli:
 
 ```agda
-record Ratio : Set where
+record Bounded : Set where
   field
-    num den : ℕ
-    bound   : num ≤ den       -- 0 ≤ valore ≤ 1, DIMOSTRATO
+    lo hi v : ℚ
+    lo≤v    : lo ≤ v          -- l'appartenenza all'intervallo
+    v≤hi    : v ≤ hi          --   è DIMOSTRATA, non dichiarata
 
 data Codomain : Set where
   flow  : Codomain                    -- magnitudo SENZA fondoscala: rate, latenza-ms
-  ratio : Ratio → Codomain            -- bounded [0,1], testimone incorporato: SLI, sat.
+  ratio : Bounded → Codomain          -- bounded [lo,hi], testimoni incorporati: SLI, sat.
   state : (n : ℕ) → Fin n → Codomain  -- categoriale: n stati
 ```
 
-Una magnitudo unbounded (un rate, una latenza in ms) non ha nulla da mettere
-in `bound`: per questo finisce in `flow`, non in `ratio`. La distinzione che
-`Scalar` aveva perso è di nuovo nel tipo.
+Il caso canonico [0,1] **emerge** da `n ≤ d` (regime 1): `inUnit n d` prova
+`0 ≤ n/d ≤ 1` — è il vecchio `m≤m+n` dell'SLI, ora su ℚ. Conseguenza onesta di
+ℚ: `0/0` non esiste, quindi una lettura ratio esige denominatore `≠ 0` (zero
+osservazioni non sono un SLI). Una magnitudo unbounded (un rate, una latenza in
+ms) non ha testimoni da esibire: per questo finisce in `flow`, non in `ratio`.
+La distinzione che `Scalar` aveva perso è di nuovo nel tipo.
 
 ### L'onestà è nel tipo
 
@@ -293,9 +296,9 @@ tessitrice. Coerente con "JSON epifenomeno": semeion resta geometria pura.
 
 ## Garanzie strutturali
 
-- **bounded non falsificabile** — `ratio` esige un `Ratio` con `num ≤ den`.
-  Non puoi marcare bounded un rate: non hai il testimone. La distinzione
-  `gauge`/`stat` torna a poggiare su struttura, non su gusto.
+- **bounded non falsificabile** — `ratio` esige un `Bounded` con i testimoni
+  `lo ≤ v ≤ hi`. Non puoi marcare bounded un rate: non hai i testimoni. La
+  distinzione `gauge`/`stat` torna a poggiare su struttura, non su gusto.
 - **emergenza dato l'intento** — pagato `now`/`overTime`, `displayAt` è
   `forced` su ogni cella tranne una. `sliNow`, `sliTrend`, `sliFamily`,
   `latencyIsNumber` sono `refl`.
@@ -319,9 +322,11 @@ tessitrice. Coerente con "JSON epifenomeno": semeion resta geometria pura.
 - **una cella resta gusto** — `now` / `flow` / `comparable` (magnitudi
   unbounded comparabili): lista di stat vs tabella. Marcata
   `underdetermined`, non risolta di nascosto.
-- **bounds solo [0,1]** — oggi `ratio` copre l'intervallo canonico [0,1] (SLI,
-  saturazione, budget). `[lo,hi]` generale (es. temperatura, percentuali >1) è
-  roadmap, non incluso.
+- **vocabolario solo [0,1]** — il *tipo* `Bounded` porta già `[lo,hi]`
+  qualunque su ℚ, ma il vocabolario SRE (`Vocab`) ne usa solo l'unità [0,1]
+  (SLI, saturazione, budget). Un segnale con cap noto fuori da [0,1] (es.
+  temperatura, %>1) ha il tipo ma non ancora una voce: si aggiunge quando
+  arriva, non a vuoto.
 - **comparabilità è un enum, non una prova di unità** — `comparable` / `mixed`
   oggi sono dichiarati; la prova che due serie condividano davvero l'unità
   (un'algebra delle unità) è roadmap. Per i `ratio` la comparabilità è gratis
@@ -331,19 +336,42 @@ tessitrice. Coerente con "JSON epifenomeno": semeion resta geometria pura.
 
 ## Roadmap
 
-In ordine di valore:
+In ordine di valore (regime fra parentesi):
 
-1. **Bounds generali `[lo,hi]`** — oltre [0,1], con il testimone `lo ≤ v ≤ hi`.
-2. **Algebra delle unità** — `comparable` come *prova* che le serie
-   condividono l'unità, non un tag.
-3. **Adapter `Display → PanelKind`** — lato Penelope, con la mappa
-   `arc↦Gauge`, `bars↦BarGauge`, `number↦Stat`, `line↦TimeSeries`,
-   `stateBands↦StatusHistory`, `grid↦Table`, e i `FieldConfig`/`Viz` derivati
-   come corollari (la soglia SLO dell'arco *è* un corollario di "target nel
-   dominio bounded").
+1. **Algebra delle unità** *(da regime 3 a 1)* — il buco d'onestà più grave:
+   `comparable` / `mixed` oggi sono enum dichiarati, non prove. Servono le
+   dimensioni fisiche (tempo^a · byte^b · 1^c) con un'algebra che dimostri
+   `unit s₁ ≡ unit s₂`, così che la comparabilità di due `flow` sia un
+   **teorema**, non un tag. Senza, metà del giudizio `bars` vs `grid` poggia
+   sul vuoto — il regime 3 travestito che semeion esiste per smascherare.
+2. **Histogram / summary come codominio** *(regime 1)* — il leaf type più ricco
+   di Prometheus manca del tutto: i bucket cumulativi `le` hanno una geometria
+   forzata (`heatmap`, un nuovo `Display` additivo) e una regola di derivazione
+   (i quantili). È l'assenza più grossa nel coprire «i segnali SRE».
+3. **Modello del tempo** *(fedeltà)* — la struttura temporale è quasi assente.
+   Da mettere nel tipo: instant vs range vector; cumulativo (counter monotono,
+   esige `rate()`) vs gauge; regolarità del campionamento / staleness. Oggi un
+   counter grezzo come `line` è una menzogna che semeion non sa rifiutare,
+   perché la monotonicità non è nel tipo.
+4. **Algebra dei segnali** *(regime 1)* — `Signal → Signal → Signal` chiusa
+   sotto le operazioni Prometheus (`sum`/`avg`/`histogram_quantile`/`topk`),
+   con le regole di tipo: sommare due `ratio` **non** dà un `ratio` (esce da
+   [0,1]); `histogram_quantile` su un istogramma dà un `flow`. Rende semeion un
+   modello dei segnali *e delle loro trasformazioni*, non solo delle foglie.
+5. **Aritmetica `ℚ` piena** *(abilitante)* — `Bounded` è già su ℚ; resta da
+   spingere ℚ dove serve davvero (quantili, medie mobili, saturazione elastica)
+   senza forzare tutto nello stampo conteggio-discreto.
+6. **Adapter `Display → PanelKind`** *(lato Penelope)* — la mappa `arc↦Gauge`,
+   `bars↦BarGauge`, `number↦Stat`, `line↦TimeSeries`, `stateBands↦StatusHistory`,
+   `grid↦Table` (+ `heatmap↦Heatmap`), coi `FieldConfig`/`Viz` derivati come
+   corollari (la soglia SLO dell'arco *è* un corollario di "target nel dominio
+   bounded").
 
 ### Già implementato
 
+- **Bounds generali `[lo,hi]` su ℚ** (`Bounded`) — oltre [0,1], col testimone
+  `lo ≤ v ≤ hi` incorporato. Il caso unità emerge da `n ≤ d` (`inUnit`, regime
+  1, il `m≤m+n` dell'SLI ora su ℚ); zero `postulate`.
 - **Vocabolario SRE** (`Semeion/Vocab.agda`) — `level`, `rate`,
   `latencyQuantile`, `burnRate`, `sli` come osservabili con regime di
   boundedness incorporato. `saturation` ed `errorBudget` sono i casi

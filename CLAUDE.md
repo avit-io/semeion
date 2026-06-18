@@ -82,6 +82,14 @@ semeion si estende in modo **conservativo**:
   richiesta è mal posta. Un `bounded` non falsificabile è un bug, non una
   feature.
 
+**Il README non resta a penzoloni.** Ogni estensione che cambia tipi, codifiche
+o regimi aggiorna `README.md` (la sezione del tipo, la tabella `displayAt`, le
+"Garanzie", "Cosa NON è garantito" e la "Roadmap") **nello stesso commit** — un
+elemento di roadmap chiuso si sposta in "Già implementato". Un README che
+descrive ancora la struttura vecchia è disonesto quanto una prova mascherata:
+documenta una geometria che non esiste più. Lo stesso vale per i commenti-doc
+dei moduli toccati.
+
 ## Le due porte (quando si lega a Penelope)
 
 La tesi "il widget emerge invece di essere scelto" si chiude in due passi:
