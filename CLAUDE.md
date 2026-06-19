@@ -123,8 +123,8 @@ Semeion/
 │                 #   displayAt + queryAt (i teoremi)
 ├── Vocab.agda    # vocabolario SRE: level/sli/rate/latency/burn/counter (regime 1)
 │                 #   · saturation/error-budget (regime 2, fedeltà) · Regime
-└── Algebra.agda  # algebra dei segnali (frammento additivo): ⊕ / avg ·
-                  #   i bound si compongono come teorema (regime 1) · Numeric
+└── Algebra.agda  # algebra dei segnali: ⊕ / avg (i bound si compongono, regime 1 ·
+                  #   Numeric) · topk (Rankable: il ranking esige comparabilità)
 ```
 
 ## Toolchain

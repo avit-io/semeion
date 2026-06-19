@@ -304,8 +304,9 @@ semeion/
 │   │                    #   prove (SLI, rifiuto p99, counter, comparabilità)
 │   ├── Vocab.agda       # vocabolario SRE: level/sli/rate/latency/burn/counter ·
 │   │                    #   saturation & error-budget come REGIME 2 (fedeltà)
-│   └── Algebra.agda     # algebra dei segnali (frammento additivo): ⊕ / avg ·
-│                        #   i bound si compongono come teorema · sum sfora, avg no
+│   └── Algebra.agda     # algebra dei segnali: ⊕ / avg (i bound si compongono ·
+│                        #   sum sfora, avg no) · topk (Rankable: ranking esige
+│                        #   comparabilità)
 ├── semeion.agda-lib     # depend: standard-library (radice: zero dep d'ecosistema)
 └── flake.nix            # packages.lib · lib.mkShell · devShells.default
 ```
@@ -375,6 +376,10 @@ tessitrice. Coerente con "JSON epifenomeno": semeion resta geometria pura.
   sfora l'unità (`sumUnitsHi`), `avg` resta nello scafo convesso (`avgUnitsHi`).
   Il nuovo fondoscala emerge, non si stipula; i categoriali sono esclusi
   dall'addizione (`Numeric`). Frammento additivo in `Semeion/Algebra.agda`.
+- **il ranking esige comparabilità** — `topk` è offerto solo su una famiglia
+  `comparable` (`Rankable`): `mixed`/`point` non sono rankable (`mixedNotRankable`,
+  `()`). Ordinare serie a unità diverse è un errore di tipo. topk preserva
+  codominio, dimensione e widget (`topkRatioStillBars`), e shrinka a `k ⊓ n`.
 - **onestà nel tipo** — `Determined` distingue `forced` da `underdetermined`,
   per *ogni* consumatore. La cella di gusto (`now`, `flow`, `comparable`)
   ritorna `underdetermined`, non una scelta travestita.
@@ -422,12 +427,15 @@ In ordine di valore (regime fra parentesi):
    con le regole di tipo: sommare due `ratio` **non** dà un `ratio` (esce da
    [0,1]); `histogram_quantile` su un istogramma dà un `flow`. Rende semeion un
    modello dei segnali *e delle loro trasformazioni*, non solo delle foglie.
-   **In corso** (`Semeion/Algebra.agda`): il frammento **additivo** c'è — i
-   bound si compongono come teorema (`⊕`, via `+-mono-≤`), `sum` sfora l'unità
-   (`sumUnitsHi`, tetto 1+1) mentre `avg` resta nello scafo convesso
-   (`avgUnitsHi`, tetto 1), e i categoriali sono esclusi (`Numeric`, niente
-   `state`). Mancano `topk` (tocca l'`Index`/famiglie), `histogram_quantile`
-   (serve il codominio histogram, item 1) e il lift a `Signal` pieno (`idx`+`tmp`).
+   **In corso** (`Semeion/Algebra.agda`): ci sono il frammento **additivo** e
+   `topk`. Additivo: i bound si compongono come teorema (`⊕`, via `+-mono-≤`),
+   `sum` sfora l'unità (`sumUnitsHi`, tetto 1+1) mentre `avg` resta nello scafo
+   convesso (`avgUnitsHi`, tetto 1), e i categoriali sono esclusi (`Numeric`,
+   niente `state`). `topk`: il ranking esige una famiglia comparabile
+   (`Rankable`, `mixed`/`point` esclusi), preserva codominio e dimensione,
+   trasforma la taglia in `k ⊓ n`. Mancano `histogram_quantile` (serve il
+   codominio histogram, item 1) e il lift a `Signal` pieno di `⊕`/`avg` (oggi a
+   livello `Bounded`/`Codomain`: comporre anche `idx`+`tmp`).
 3. **Aritmetica `ℚ` piena** *(abilitante)* — `Bounded` è già su ℚ; resta da
    spingere ℚ dove serve davvero (quantili, medie mobili, saturazione elastica)
    senza forzare tutto nello stampo conteggio-discreto.
