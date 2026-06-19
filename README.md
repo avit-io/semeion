@@ -338,30 +338,46 @@ tessitrice. Coerente con "JSON epifenomeno": semeion resta geometria pura.
 
 In ordine di valore (regime fra parentesi):
 
-1. **Algebra delle unità** *(da regime 3 a 1)* — il buco d'onestà più grave:
+1. **Generalizzazione del consumatore — `Determined A`** *(strutturale)* —
+   `Faithful` è `Determined Display`: la dicotomia `forced | underdetermined`
+   è epistemica (regime 1 vs 3), non specifica del rendering. Il segnale riduce
+   la libertà di *ogni* consumatore a valle, non solo del widget. Estrarre
+   `Determined (A : Set)` e derivarne `queryAt : Intent → Signal → Determined
+   QueryShape` (PromQL / log) accanto a `displayAt`. La libertà residua resta
+   esibita: `underdetermined xs` *è* lo spazio di scelta onesto, non l'assenza
+   di vincolo.
+2. **Testimoni distribuiti — il `Signal` porta più prove** *(fedeltà)* — la
+   struttura si distribuisce in modo non uniforme tra i consumatori: il
+   **bound** (`lo ≤ v ≤ hi`) forza il *widget* (`arc`), la **monotonicità** di
+   un counter forza la *query* (`rate()` è la sola lettura fedele di un counter
+   monotòno). Sono due testimoni diversi nello stesso segnale. Aggiungere
+   `temporal : Temporal` al `Signal` (instant vs range vector; cumulativo vs
+   gauge; staleness / regolarità del campionamento) così che `queryAt` lo
+   consumi come `displayAt` consuma `cod`. Il payoff falsificabile è simmetrico
+   al rifiuto della gauge sulla p99: `rate()` su un gauge diventa un **errore di
+   tipo**, e un counter grezzo come `line` (senza `rate()`) è una menzogna che
+   oggi semeion non sa rifiutare. Attenzione a non reintrodurre il regime 3 di
+   nascosto — la window (`5m` vs `1m`) è gusto, il `now`/`overTime` del
+   lato-query: va in `underdetermined`, non forzata.
+3. **Algebra delle unità** *(da regime 3 a 1)* — il buco d'onestà più grave:
    `comparable` / `mixed` oggi sono enum dichiarati, non prove. Servono le
    dimensioni fisiche (tempo^a · byte^b · 1^c) con un'algebra che dimostri
    `unit s₁ ≡ unit s₂`, così che la comparabilità di due `flow` sia un
    **teorema**, non un tag. Senza, metà del giudizio `bars` vs `grid` poggia
    sul vuoto — il regime 3 travestito che semeion esiste per smascherare.
-2. **Histogram / summary come codominio** *(regime 1)* — il leaf type più ricco
+4. **Histogram / summary come codominio** *(regime 1)* — il leaf type più ricco
    di Prometheus manca del tutto: i bucket cumulativi `le` hanno una geometria
    forzata (`heatmap`, un nuovo `Display` additivo) e una regola di derivazione
    (i quantili). È l'assenza più grossa nel coprire «i segnali SRE».
-3. **Modello del tempo** *(fedeltà)* — la struttura temporale è quasi assente.
-   Da mettere nel tipo: instant vs range vector; cumulativo (counter monotono,
-   esige `rate()`) vs gauge; regolarità del campionamento / staleness. Oggi un
-   counter grezzo come `line` è una menzogna che semeion non sa rifiutare,
-   perché la monotonicità non è nel tipo.
-4. **Algebra dei segnali** *(regime 1)* — `Signal → Signal → Signal` chiusa
+5. **Algebra dei segnali** *(regime 1)* — `Signal → Signal → Signal` chiusa
    sotto le operazioni Prometheus (`sum`/`avg`/`histogram_quantile`/`topk`),
    con le regole di tipo: sommare due `ratio` **non** dà un `ratio` (esce da
    [0,1]); `histogram_quantile` su un istogramma dà un `flow`. Rende semeion un
    modello dei segnali *e delle loro trasformazioni*, non solo delle foglie.
-5. **Aritmetica `ℚ` piena** *(abilitante)* — `Bounded` è già su ℚ; resta da
+6. **Aritmetica `ℚ` piena** *(abilitante)* — `Bounded` è già su ℚ; resta da
    spingere ℚ dove serve davvero (quantili, medie mobili, saturazione elastica)
    senza forzare tutto nello stampo conteggio-discreto.
-6. **Adapter `Display → PanelKind`** *(lato Penelope)* — la mappa `arc↦Gauge`,
+7. **Adapter `Display → PanelKind`** *(lato Penelope)* — la mappa `arc↦Gauge`,
    `bars↦BarGauge`, `number↦Stat`, `line↦TimeSeries`, `stateBands↦StatusHistory`,
    `grid↦Table` (+ `heatmap↦Heatmap`), coi `FieldConfig`/`Viz` derivati come
    corollari (la soglia SLO dell'arco *è* un corollario di "target nel dominio
