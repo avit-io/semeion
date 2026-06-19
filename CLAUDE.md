@@ -121,11 +121,14 @@ Semeion/
 ├── Signal.agda   # Signal (Codomain · Index/Dim · Temporal) · Display ·
 │                 #   Determined (Faithful · QueryShape) · Intent (il K locale) ·
 │                 #   displayAt + queryAt (i teoremi)
-└── Vocab.agda    # vocabolario SRE: level/sli/rate/latency/burn/counter (regime 1)
-                  #   · saturation/error-budget (regime 2, fedeltà) · Regime
+├── Vocab.agda    # vocabolario SRE: level/sli/rate/latency/burn/counter (regime 1)
+│                 #   · saturation/error-budget (regime 2, fedeltà) · Regime
+└── Algebra.agda  # algebra dei segnali (frammento additivo): ⊕ / avg ·
+                  #   i bound si compongono come teorema (regime 1) · Numeric
 ```
 
 ## Toolchain
 
 Agda 2.8 via piforge, flake nix, `nix develop` (solo stdlib in scope — semeion
-è una radice). Typecheck: `agda Semeion/Signal.agda`, `agda Semeion/Vocab.agda`.
+è una radice). Typecheck: `agda Semeion/Signal.agda`, `agda Semeion/Vocab.agda`,
+`agda Semeion/Algebra.agda`.
