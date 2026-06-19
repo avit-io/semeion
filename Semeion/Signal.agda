@@ -22,9 +22,10 @@
 module Semeion.Signal where
 
 open import Data.Nat     as ℕ using (ℕ; suc; z≤n; s≤s)
-open import Data.Fin     using (Fin)
+open import Data.Fin     using (Fin; zero; suc)
 open import Data.List    using (List; _∷_; [])
 open import Data.Product using (∃-syntax; _,_)
+open import Relation.Nullary using (¬_)
 open import Data.Integer as ℤ using (ℤ; +_)
 import      Data.Integer.Properties as ℤ
 open import Data.Rational using (ℚ; 0ℚ; 1ℚ; _/_; _≤_; toℚᵘ)
@@ -99,12 +100,30 @@ data Codomain : Set where
                                    --   incorporati: SLI, saturazione, budget
   state : (n : ℕ) → Fin n → Codomain  -- categoriale: n stati, quello corrente
 
--- ── Indice: scalare singolo o famiglia etichettata ─────────────────────
+-- ── Dimensione fisica: comparabilità come PROVA, non come tag ──────────
+-- Una serie ha una dimensione (tempo^a · byte^b · adimensionale). Due serie
+-- sono comparabili SE condividono la dimensione — e questo NON si dichiara,
+-- si esibisce. `comparable`/`mixed` non sono più enum liberi: portano i
+-- testimoni `AllEqual ds` / `¬ AllEqual ds`. Senza, non li puoi costruire.
+record Dim : Set where
+  constructor dim
+  field
+    time bytes : ℤ                 -- esponenti; adimensionale = dim (+ 0) (+ 0)
+
+dimensionless : Dim                -- la dimensione canonica dei ratio ([0,1])
+dimensionless = dim (+ 0) (+ 0)
+
+-- Una famiglia di `n` serie condivide la dimensione: il testimone è puntuale.
+AllEqual : ∀ {n} → (Fin n → Dim) → Set
+AllEqual ds = ∀ i j → ds i ≡ ds j
+
+-- ── Indice: scalare singolo o famiglia con TESTIMONE di dimensione ─────
 data Index : Set where
-  point      : Index               -- un solo valore
-  comparable : Index               -- famiglia su UNA scala condivisa
-                                   --   (per-servizio SLI: tutti in [0,1])
-  mixed      : Index               -- famiglia su scale eterogenee (unità diverse)
+  point      : Index                                       -- un solo valore
+  comparable : (n : ℕ) (ds : Fin n → Dim) → AllEqual ds   → Index
+                                   -- famiglia su UNA scala condivisa: PROVATA
+  mixed      : (n : ℕ) (ds : Fin n → Dim) → ¬ AllEqual ds → Index
+                                   -- famiglia su scale eterogenee: PROVATE diverse
 
 -- ── Temporalità: come il valore vive nel tempo (testimone della QUERY) ─
 -- Il bound forza il WIDGET (`arc`); la monotonicità forza la QUERY: un
@@ -164,20 +183,20 @@ displayAt overTime (mkSignal flow        _ _)          = forced line
 displayAt overTime (mkSignal (ratio _)   _ _)          = forced line
 displayAt overTime (mkSignal (state _ _) _ _)          = forced stateBands
 -- now, bounded: l'intervallo intrinseco È l'arco; N comparabili sono barre.
-displayAt now (mkSignal (ratio _)   point      _) = forced arc
-displayAt now (mkSignal (ratio _)   comparable _) = forced bars
-displayAt now (mkSignal (ratio _)   mixed      _) = forced bars   -- i ratio
+displayAt now (mkSignal (ratio _)   point            _) = forced arc
+displayAt now (mkSignal (ratio _)   (comparable _ _ _) _) = forced bars
+displayAt now (mkSignal (ratio _)   (mixed _ _ _)      _) = forced bars   -- i ratio
                                               -- condividono [0,1]: sempre comparabili
 -- now, unbounded: niente fondoscala ⇒ numero nudo (un arco avrebbe estremi fiat).
-displayAt now (mkSignal flow        point      _) = forced number
-displayAt now (mkSignal flow        mixed      _) = forced grid    -- unità eterogenee
+displayAt now (mkSignal flow        point            _) = forced number
+displayAt now (mkSignal flow        (mixed _ _ _)      _) = forced grid    -- dimensioni provate diverse
 -- L'UNICA cella sottodeterminata: magnitudi unbounded comparabili, adesso.
 -- Lista di stat vs tabella è gusto. La struttura NON sceglie ⇒ menu.
-displayAt now (mkSignal flow        comparable _) = underdetermined (number ∷ grid ∷ [])
+displayAt now (mkSignal flow        (comparable _ _ _) _) = underdetermined (number ∷ grid ∷ [])
 -- now, categoriale: stato corrente come badge / tabella di stati.
-displayAt now (mkSignal (state _ _) point      _) = forced number
-displayAt now (mkSignal (state _ _) comparable _) = forced grid
-displayAt now (mkSignal (state _ _) mixed      _) = forced grid
+displayAt now (mkSignal (state _ _) point            _) = forced number
+displayAt now (mkSignal (state _ _) (comparable _ _ _) _) = forced grid
+displayAt now (mkSignal (state _ _) (mixed _ _ _)      _) = forced grid
 
 -- ── Il SECONDO consumatore: la query (testimone `tmp`, non `cod`) ──────
 -- `Determined` non è specifico del rendering. Lo stesso segnale determina
@@ -220,8 +239,9 @@ sliTrend : ∀ (r : Ratio) (t : Temporal) → displayAt overTime (mkSignal (rati
 sliTrend _ _ = refl
 
 -- Famiglia di SLI per-servizio (tutti in [0,1], comparabili) ⇒ barre.
-sliFamily : ∀ (r : Ratio) (t : Temporal) → displayAt now (mkSignal (ratio r) comparable t) ≡ forced bars
-sliFamily _ _ = refl
+sliFamily : ∀ (r : Ratio) (t : Temporal) n ds (p : AllEqual ds)
+  → displayAt now (mkSignal (ratio r) (comparable n ds p) t) ≡ forced bars
+sliFamily _ _ _ _ _ = refl
 
 -- ── Rifiuto onesto: una magnitudo unbounded NON è una gauge ────────────
 -- Latenza p99 / rate / count: niente fondoscala. semeion RIFIUTA l'arco
@@ -240,9 +260,33 @@ overTimeAlwaysForced (mkSignal (state _ _) _ _) = stateBands , refl
 
 -- ── L'UNICA cella sottodeterminata, esibita (onestà nel tipo) ──────────
 -- Non la mascheriamo con una scelta: il tipo dice `underdetermined`.
-flowFamilyUnderdetermined : ∀ (t : Temporal) →
-  displayAt now (mkSignal flow comparable t) ≡ underdetermined (number ∷ grid ∷ [])
-flowFamilyUnderdetermined _ = refl
+flowFamilyUnderdetermined : ∀ (t : Temporal) n ds (p : AllEqual ds) →
+  displayAt now (mkSignal flow (comparable n ds p) t) ≡ underdetermined (number ∷ grid ∷ [])
+flowFamilyUnderdetermined _ _ _ _ = refl
+
+-- ── Comparabilità come TEOREMA, non come tag (algebra delle unità) ─────
+-- Stessa dimensione ⇒ la famiglia È comparabile: il testimone esiste (refl
+-- puntuale), quindi `comparable` è costruibile. Per i `ratio` è gratis: la
+-- loro dimensione è `dimensionless`, canonica.
+sameDimAllEqual : (d : Dim) (n : ℕ) → AllEqual {n} (λ _ → d)
+sameDimAllEqual d n _ _ = refl
+
+-- Famiglia a due serie con dimensioni a/b.
+twoDim : Dim → Dim → Fin 2 → Dim
+twoDim a b zero    = a
+twoDim a b (suc _) = b
+
+-- Dimensioni DIVERSE ⇒ NON comparabili: `AllEqual` è vuoto, quindi non puoi
+-- costruire `comparable`. Il buco d'onestà ("comparable è un enum libero") è
+-- chiuso: la comparabilità ora poggia su una prova di unità, non sul vuoto.
+diffNotAllEqual : ∀ {a b} → a ≢ b → ¬ AllEqual (twoDim a b)
+diffNotAllEqual a≢b all = a≢b (all zero (suc zero))
+
+-- Due flow di dimensioni provate diverse ⇒ griglia, MAI barre (è un teorema,
+-- non un tag): il duale, sul lato-famiglia, del rifiuto della gauge sulla p99.
+mixedNotBars : ∀ {n ds} (¬eq : ¬ AllEqual ds) (t : Temporal)
+  → displayAt now (mkSignal flow (mixed n ds ¬eq) t) ≢ forced bars
+mixedNotBars _ _ ()
 
 -- ── La query EMERGE dalla temporalità — il payoff falsificabile ────────
 -- Un counter monotòno: rate() è l'unica lettura fedele (indipende dall'intento).

@@ -184,6 +184,24 @@ La **window** (`5m` vs `1m`) NON entra in `QueryShape`: è il *K locale
 lato-query* — l'analogo dell'intento per il display — un fiat fuori dal tipo,
 nominato, non mascherato.
 
+### La comparabilità è una PROVA di unità, non un tag
+
+`comparable` / `mixed` non sono più enum liberi: portano un **testimone di
+dimensione**. Una serie ha una `Dim` (tempo^a · byte^b · adimensionale); due
+serie sono comparabili **se** condividono la dimensione — e lo si esibisce.
+
+```agda
+data Index : Set where
+  point      : Index
+  comparable : (n : ℕ) (ds : Fin n → Dim) → AllEqual ds   → Index
+  mixed      : (n : ℕ) (ds : Fin n → Dim) → ¬ AllEqual ds → Index
+```
+
+Non puoi più taggare `comparable` una famiglia a unità diverse: il costruttore
+esige `AllEqual ds`, e dimensioni diverse lo rendono **vuoto** (`diffNotAllEqual`).
+La comparabilità di due `flow` è ora un **teorema**, non fede. Per i `ratio` è
+gratis: la loro dimensione è `dimensionless`, canonica.
+
 ### Il segnale richiesto: ratio / SLI
 
 Un SLI è `good/total`, `0 ≤ good ≤ total` ⇒ `Codomain = ratio`, e **questo è
@@ -281,9 +299,9 @@ agda Semeion/Signal.agda     # typecheck completo: 0 postulate, --safe --without
 ```
 semeion/
 ├── Semeion/
-│   ├── Signal.agda      # Signal (Codomain · Index · Temporal) · Display ·
+│   ├── Signal.agda      # Signal (Codomain · Index/Dim · Temporal) · Display ·
 │   │                    #   Determined · displayAt + queryAt (i teoremi) · le
-│   │                    #   prove (SLI, rifiuto p99, counter)
+│   │                    #   prove (SLI, rifiuto p99, counter, comparabilità)
 │   └── Vocab.agda       # vocabolario SRE: level/sli/rate/latency/burn/counter ·
 │                        #   saturation & error-budget come REGIME 2 (fedeltà)
 ├── semeion.agda-lib     # depend: standard-library (radice: zero dep d'ecosistema)
@@ -347,6 +365,9 @@ tessitrice. Coerente con "JSON epifenomeno": semeion resta geometria pura.
   forced raw` e `queryAt _ (… instant) ≢ forced rated`: un counter monotòno
   letto grezzo come `line` è una menzogna, `rate()` su un gauge è un errore.
   Il duale, sul lato-query, del rifiuto della gauge sulla p99.
+- **comparabilità provata** — `comparable` esige `AllEqual ds`; dimensioni
+  diverse lo rendono vuoto. `mixed (flow) ≢ forced bars`: due serie a unità
+  diverse **non** sono barre. Teorema, non tag.
 - **onestà nel tipo** — `Determined` distingue `forced` da `underdetermined`,
   per *ogni* consumatore. La cella di gusto (`now`, `flow`, `comparable`)
   ritorna `underdetermined`, non una scelta travestita.
@@ -372,10 +393,12 @@ tessitrice. Coerente con "JSON epifenomeno": semeion resta geometria pura.
   (SLI, saturazione, budget). Un segnale con cap noto fuori da [0,1] (es.
   temperatura, %>1) ha il tipo ma non ancora una voce: si aggiunge quando
   arriva, non a vuoto.
-- **comparabilità è un enum, non una prova di unità** — `comparable` / `mixed`
-  oggi sono dichiarati; la prova che due serie condividano davvero l'unità
-  (un'algebra delle unità) è roadmap. Per i `ratio` la comparabilità è gratis
-  ([0,1] è canonico); per i `flow` è ancora fede.
+- **la dimensione delle serie è asserita al sito di costruzione** — `comparable`
+  / `mixed` ora *esigono* il testimone `AllEqual ds` / `¬ AllEqual ds`: la
+  comparabilità è una prova, non un tag. Ciò che resta fede è il legame fra la
+  `Dim` dichiarata e l'unità *reale* della serie — chiuso a valle (porta 2,
+  per costruzione), non per ispezione. L'algebra è oggi a due dimensioni base
+  (tempo, byte); se ne aggiungono altre quando un segnale le porta.
 
 ---
 
@@ -383,25 +406,19 @@ tessitrice. Coerente con "JSON epifenomeno": semeion resta geometria pura.
 
 In ordine di valore (regime fra parentesi):
 
-1. **Algebra delle unità** *(da regime 3 a 1)* — il buco d'onestà più grave:
-   `comparable` / `mixed` oggi sono enum dichiarati, non prove. Servono le
-   dimensioni fisiche (tempo^a · byte^b · 1^c) con un'algebra che dimostri
-   `unit s₁ ≡ unit s₂`, così che la comparabilità di due `flow` sia un
-   **teorema**, non un tag. Senza, metà del giudizio `bars` vs `grid` poggia
-   sul vuoto — il regime 3 travestito che semeion esiste per smascherare.
-2. **Histogram / summary come codominio** *(regime 1)* — il leaf type più ricco
+1. **Histogram / summary come codominio** *(regime 1)* — il leaf type più ricco
    di Prometheus manca del tutto: i bucket cumulativi `le` hanno una geometria
    forzata (`heatmap`, un nuovo `Display` additivo) e una regola di derivazione
    (i quantili). È l'assenza più grossa nel coprire «i segnali SRE».
-3. **Algebra dei segnali** *(regime 1)* — `Signal → Signal → Signal` chiusa
+2. **Algebra dei segnali** *(regime 1)* — `Signal → Signal → Signal` chiusa
    sotto le operazioni Prometheus (`sum`/`avg`/`histogram_quantile`/`topk`),
    con le regole di tipo: sommare due `ratio` **non** dà un `ratio` (esce da
    [0,1]); `histogram_quantile` su un istogramma dà un `flow`. Rende semeion un
    modello dei segnali *e delle loro trasformazioni*, non solo delle foglie.
-4. **Aritmetica `ℚ` piena** *(abilitante)* — `Bounded` è già su ℚ; resta da
+3. **Aritmetica `ℚ` piena** *(abilitante)* — `Bounded` è già su ℚ; resta da
    spingere ℚ dove serve davvero (quantili, medie mobili, saturazione elastica)
    senza forzare tutto nello stampo conteggio-discreto.
-5. **Adapter `Display → PanelKind`** *(lato Penelope)* — la mappa `arc↦Gauge`,
+4. **Adapter `Display → PanelKind`** *(lato Penelope)* — la mappa `arc↦Gauge`,
    `bars↦BarGauge`, `number↦Stat`, `line↦TimeSeries`, `stateBands↦StatusHistory`,
    `grid↦Table` (+ `heatmap↦Heatmap`), coi `FieldConfig`/`Viz` derivati come
    corollari (la soglia SLO dell'arco *è* un corollario di "target nel dominio
@@ -420,6 +437,12 @@ In ordine di valore (regime fra parentesi):
   `rate()` su un gauge è un **errore di tipo**, un counter grezzo come `line`
   una menzogna (`counterNotRaw`, `gaugeNotRated`, `refl`/`()`). La window resta
   il K lato-query, nominato.
+- **Algebra delle unità — comparabilità provata** *(da regime 3 a 1)* —
+  `comparable` / `mixed` non sono più enum: portano il testimone di dimensione
+  (`AllEqual ds` / `¬ AllEqual ds`). Dimensioni diverse ⇒ `comparable`
+  inconstruibile (`diffNotAllEqual`), e due `flow` a unità diverse non sono
+  barre (`mixedNotBars`). La comparabilità è un **teorema**, non un tag; per i
+  `ratio` è gratis (`dimensionless`).
 - **Bounds generali `[lo,hi]` su ℚ** (`Bounded`) — oltre [0,1], col testimone
   `lo ≤ v ≤ hi` incorporato. Il caso unità emerge da `n ≤ d` (`inUnit`, regime
   1, il `m≤m+n` dell'SLI ora su ℚ); zero `postulate`.
