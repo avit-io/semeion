@@ -118,10 +118,11 @@ emerge (e allora è regime 2 o 3 — si nomina, non si aggira).
 
 ```
 Semeion/
-├── Signal.agda   # Signal (Codomain · Index) · Display · Faithful ·
-│                 #   Intent (il K locale) · displayAt (il teorema)
-└── Vocab.agda    # vocabolario SRE: level/sli/rate/latency/burn (regime 1) ·
-                  #   saturation/error-budget (regime 2, fedeltà) · Regime
+├── Signal.agda   # Signal (Codomain · Index · Temporal) · Display ·
+│                 #   Determined (Faithful · QueryShape) · Intent (il K locale) ·
+│                 #   displayAt + queryAt (i teoremi)
+└── Vocab.agda    # vocabolario SRE: level/sli/rate/latency/burn/counter (regime 1)
+                  #   · saturation/error-budget (regime 2, fedeltà) · Regime
 ```
 
 ## Toolchain

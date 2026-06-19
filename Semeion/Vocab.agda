@@ -52,26 +52,36 @@ nowReading o = displayAt now (Observable.signal o)
 -- DIMOSTRATO dalla decomposizione, non assunto. Nessun input empirico.
 -- L'unico vincolo nuovo (su ℚ): almeno UNA osservazione — `good+bad ≠ 0`.
 -- Zero osservazioni non sono "SLI = 0/0": non sono un SLI affatto. Onesto.
+-- Il rapporto good/(good+bad) è già la lettura: un valore istantaneo (`instant`),
+-- non un counter da derivare. La sua temporalità non chiede `rate()`.
 sli : (good bad : ℕ) → ⦃ NonZero (good + bad) ⦄ → Observable
-sli good bad = obs (mkSignal (ratio (inUnit good (good + bad) (m≤m+n good bad))) point)
+sli good bad = obs (mkSignal (ratio (inUnit good (good + bad) (m≤m+n good bad))) point instant)
                    emergent
 
 -- level / rate / latencyQuantile: magnitudi SENZA fondoscala intrinseco.
 -- Nessun bound da esibire ⇒ `flow`. La loro non-boundedness È la struttura.
 level : Observable
-level = obs (mkSignal flow point) emergent
+level = obs (mkSignal flow point instant) emergent
 
+-- `rate` è GIÀ la derivata che si grafica: un valore istantaneo (`instant`),
+-- non il counter grezzo. Il counter grezzo è `counter`, sotto, ed è `cumulative`.
 rate : Observable
-rate = obs (mkSignal flow point) emergent
+rate = obs (mkSignal flow point instant) emergent
 
 latencyQuantile : Observable           -- p50/p95/p99: bounded sotto da 0,
-latencyQuantile = obs (mkSignal flow point) emergent   -- UNBOUNDED sopra
+latencyQuantile = obs (mkSignal flow point instant) emergent   -- UNBOUNDED sopra
 
 -- burn-rate: (1-SLI)/(1-SLO). Può valere 14×: niente fondoscala. Ha una
 -- soglia a 1 (bruci esattamente il budget) ma una soglia NON è un dominio.
 -- ⇒ `flow`. La gauge è rifiutata; semmai uno `stat` con soglia colorata.
 burnRate : Observable
-burnRate = obs (mkSignal flow point) emergent
+burnRate = obs (mkSignal flow point instant) emergent
+
+-- counter grezzo (es. http_requests_total): monotòno, `cumulative`. La sua
+-- temporalità forza la QUERY: `rate()` è l'unica lettura fedele. Letto grezzo
+-- come `line` è una menzogna — il duale, sul lato-query, della p99-come-gauge.
+counter : Observable
+counter = obs (mkSignal flow point cumulative) emergent
 
 -- ╔══════════════════════════════════════════════════════════════════════╗
 -- ║  REGIME 2 — bounded SOLO per fedeltà a un fatto del deployment        ║
@@ -92,9 +102,9 @@ burnRate = obs (mkSignal flow point) emergent
 -- elastico `nothing` non paga nulla — la positività vive solo nella claim.
 saturation : (usage capacity : ℕ) → Maybe (NonZero capacity × usage ≤ capacity) → Observable
 saturation usage capacity (just (nz , hyp)) =
-  obs (mkSignal (ratio (inUnit usage capacity ⦃ nz ⦄ hyp)) point) fidelity
+  obs (mkSignal (ratio (inUnit usage capacity ⦃ nz ⦄ hyp)) point instant) fidelity
 saturation usage capacity nothing =
-  obs (mkSignal flow point) emergent
+  obs (mkSignal flow point instant) emergent
 
 -- error-budget consumato = bad / budget (la frazione rimanente è il duale
 -- 1 − questa). È il regime-2 più AFFILATO: un budget è FATTO per essere
@@ -110,9 +120,9 @@ saturation usage capacity nothing =
 --                   solo un numero è onesto.
 errorBudget : (bad budget : ℕ) → Maybe (NonZero budget × bad ≤ budget) → Observable
 errorBudget bad budget (just (nz , hyp)) =
-  obs (mkSignal (ratio (inUnit bad budget ⦃ nz ⦄ hyp)) point) fidelity
+  obs (mkSignal (ratio (inUnit bad budget ⦃ nz ⦄ hyp)) point instant) fidelity
 errorBudget bad budget nothing =
-  obs (mkSignal flow point) emergent
+  obs (mkSignal flow point instant) emergent
 
 -- ╔══════════════════════════════════════════════════════════════════════╗
 -- ║  TEOREMI — il contrasto regime 1 / regime 2 vive nei tipi            ║
@@ -171,3 +181,12 @@ burnNotArc ()
 
 latencyQNotArc : nowReading latencyQuantile ≢ forced arc
 latencyQNotArc ()
+
+-- ── counter: la QUERY emerge dalla temporalità (lato-query) ────────────
+-- Duale del rifiuto della gauge: un counter monotòno letto grezzo è una
+-- menzogna. `rate()` è forzato, e il grezzo (`raw`) è RIFIUTATO.
+counterQueryRated : queryAt now (Observable.signal counter) ≡ forced rated
+counterQueryRated = refl
+
+counterQueryNotRaw : queryAt now (Observable.signal counter) ≢ forced raw
+counterQueryNotRaw ()

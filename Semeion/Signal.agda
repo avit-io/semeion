@@ -106,11 +106,21 @@ data Index : Set where
                                    --   (per-servizio SLI: tutti in [0,1])
   mixed      : Index               -- famiglia su scale eterogenee (unità diverse)
 
+-- ── Temporalità: come il valore vive nel tempo (testimone della QUERY) ─
+-- Il bound forza il WIDGET (`arc`); la monotonicità forza la QUERY: un
+-- counter monotòno si legge fedelmente SOLO con `rate()`. Due testimoni
+-- diversi nello STESSO segnale, consumati da due funzioni diverse.
+data Temporal : Set where
+  instant    : Temporal            -- gauge: il valore È già la lettura
+  cumulative : Temporal            -- counter monotòno: rate() è l'unica
+                                   --   lettura fedele (il grezzo è una menzogna)
+
 record Signal : Set where          -- NB: nessun campo `intent`. L'intento
   constructor mkSignal             --     è il K locale, non un asse del segnale.
   field
     cod : Codomain
     idx : Index
+    tmp : Temporal
 
 -- ── Display: la primitiva GEOMETRICA, nominata da cos'È, non da Grafana ─
 data Display : Set where
@@ -122,11 +132,19 @@ data Display : Set where
   grid       : Display   -- una famiglia non comparabile (→ table)
 
 -- ── L'onestà è NEL TIPO ────────────────────────────────────────────────
--- Il codominio di `displayAt` testimonia se la scelta è emersa o no.
-data Faithful : Set where
-  forced          : Display → Faithful         -- emerge: unico fedele
-  underdetermined : List Display → Faithful     -- la struttura non forza:
+-- La dicotomia `forced | underdetermined` è EPISTEMICA (regime 1 vs 3), non
+-- specifica del rendering: il segnale riduce la libertà di OGNI consumatore a
+-- valle, non solo del widget. Per questo è `Determined A`, polimorfo. La
+-- libertà residua resta esibita: `underdetermined xs` È lo spazio di scelta
+-- onesto, non l'assenza di vincolo.
+data Determined (A : Set) : Set where
+  forced          : A → Determined A           -- emerge: unico fedele
+  underdetermined : List A → Determined A        -- la struttura non forza:
                                                 --   menu onesto, serve un fiat
+
+-- Il consumatore-widget: il `Display` che il segnale forza (o il menu onesto).
+Faithful : Set
+Faithful = Determined Display
 
 -- ── L'intento: l'UNICA stipulazione (il K locale) ──────────────────────
 -- Non vive nel segnale. È la domanda dell'operatore, pagata al sito d'uso.
@@ -141,24 +159,42 @@ data Intent : Set where
 displayAt : Intent → Signal → Faithful
 -- overTime: la continuità del codominio forza linea vs bande. Una linea
 -- tracciata fra FAIL e OK sarebbe una menzogna geometrica ⇒ stateBands.
-displayAt overTime (mkSignal flow        _)          = forced line
-displayAt overTime (mkSignal (ratio _)   _)          = forced line
-displayAt overTime (mkSignal (state _ _) _)          = forced stateBands
+-- (`tmp` non tocca il WIDGET: forza la query, non la forma — vedi `queryAt`.)
+displayAt overTime (mkSignal flow        _ _)          = forced line
+displayAt overTime (mkSignal (ratio _)   _ _)          = forced line
+displayAt overTime (mkSignal (state _ _) _ _)          = forced stateBands
 -- now, bounded: l'intervallo intrinseco È l'arco; N comparabili sono barre.
-displayAt now (mkSignal (ratio _)   point)      = forced arc
-displayAt now (mkSignal (ratio _)   comparable) = forced bars
-displayAt now (mkSignal (ratio _)   mixed)      = forced bars   -- i ratio
+displayAt now (mkSignal (ratio _)   point      _) = forced arc
+displayAt now (mkSignal (ratio _)   comparable _) = forced bars
+displayAt now (mkSignal (ratio _)   mixed      _) = forced bars   -- i ratio
                                               -- condividono [0,1]: sempre comparabili
 -- now, unbounded: niente fondoscala ⇒ numero nudo (un arco avrebbe estremi fiat).
-displayAt now (mkSignal flow        point)      = forced number
-displayAt now (mkSignal flow        mixed)      = forced grid    -- unità eterogenee
+displayAt now (mkSignal flow        point      _) = forced number
+displayAt now (mkSignal flow        mixed      _) = forced grid    -- unità eterogenee
 -- L'UNICA cella sottodeterminata: magnitudi unbounded comparabili, adesso.
 -- Lista di stat vs tabella è gusto. La struttura NON sceglie ⇒ menu.
-displayAt now (mkSignal flow        comparable) = underdetermined (number ∷ grid ∷ [])
+displayAt now (mkSignal flow        comparable _) = underdetermined (number ∷ grid ∷ [])
 -- now, categoriale: stato corrente come badge / tabella di stati.
-displayAt now (mkSignal (state _ _) point)      = forced number
-displayAt now (mkSignal (state _ _) comparable) = forced grid
-displayAt now (mkSignal (state _ _) mixed)      = forced grid
+displayAt now (mkSignal (state _ _) point      _) = forced number
+displayAt now (mkSignal (state _ _) comparable _) = forced grid
+displayAt now (mkSignal (state _ _) mixed      _) = forced grid
+
+-- ── Il SECONDO consumatore: la query (testimone `tmp`, non `cod`) ──────
+-- `Determined` non è specifico del rendering. Lo stesso segnale determina
+-- anche la lettura PromQL fedele, e da un testimone DIVERSO: la temporalità.
+-- Un counter monotòno letto grezzo è una menzogna; `rate()` è l'unica lettura
+-- fedele. Un gauge, al contrario, È già la lettura: `rate()` su un gauge è un
+-- errore. È il payoff falsificabile simmetrico al rifiuto della gauge sulla p99.
+data QueryShape : Set where
+  raw   : QueryShape   -- letto così com'è (gauge / instant vector)
+  rated : QueryShape   -- rate()/increase(): l'unica lettura fedele di un counter
+
+-- La temporalità forza la forma della query. La WINDOW (`5m` vs `1m`) NON entra
+-- qui: è il K locale lato-query (l'analogo dell'intento per il display), un
+-- fiat fuori dal tipo — nominato, non mascherato.
+queryAt : Intent → Signal → Determined QueryShape
+queryAt _ (mkSignal _ _ instant)    = forced raw
+queryAt _ (mkSignal _ _ cumulative) = forced rated
 
 -- Senza pagare l'intento (senza il K), lo spread irriducibile del segnale.
 viz : Signal → List Display
@@ -177,33 +213,46 @@ viz s = collect (displayAt now s) ++ᵈ collect (displayAt overTime s)
 
 -- ── ratio/SLI: la visualizzazione EMERGE, dato l'intento (regime 1) ────
 -- "scalare → gauge" non è più un fiat: bounded + point + now ⇒ arc, provato.
-sliNow : ∀ (r : Ratio) → displayAt now (mkSignal (ratio r) point) ≡ forced arc
-sliNow _ = refl
+sliNow : ∀ (r : Ratio) (t : Temporal) → displayAt now (mkSignal (ratio r) point t) ≡ forced arc
+sliNow _ _ = refl
 
-sliTrend : ∀ (r : Ratio) → displayAt overTime (mkSignal (ratio r) point) ≡ forced line
-sliTrend _ = refl
+sliTrend : ∀ (r : Ratio) (t : Temporal) → displayAt overTime (mkSignal (ratio r) point t) ≡ forced line
+sliTrend _ _ = refl
 
 -- Famiglia di SLI per-servizio (tutti in [0,1], comparabili) ⇒ barre.
-sliFamily : ∀ (r : Ratio) → displayAt now (mkSignal (ratio r) comparable) ≡ forced bars
-sliFamily _ = refl
+sliFamily : ∀ (r : Ratio) (t : Temporal) → displayAt now (mkSignal (ratio r) comparable t) ≡ forced bars
+sliFamily _ _ = refl
 
 -- ── Rifiuto onesto: una magnitudo unbounded NON è una gauge ────────────
 -- Latenza p99 / rate / count: niente fondoscala. semeion RIFIUTA l'arco
 -- (in Grafana è il peccato del fondoscala inventato).
-latencyIsNumber : displayAt now (mkSignal flow point) ≡ forced number
-latencyIsNumber = refl
+latencyIsNumber : ∀ (t : Temporal) → displayAt now (mkSignal flow point t) ≡ forced number
+latencyIsNumber _ = refl
 
-latencyNotArc : displayAt now (mkSignal flow point) ≢ forced arc
-latencyNotArc ()
+latencyNotArc : ∀ (t : Temporal) → displayAt now (mkSignal flow point t) ≢ forced arc
+latencyNotArc _ ()
 
 -- ── Pagare overTime forza SEMPRE: nessun residuo su quel ramo ──────────
 overTimeAlwaysForced : ∀ (s : Signal) → ∃[ d ] displayAt overTime s ≡ forced d
-overTimeAlwaysForced (mkSignal flow        _) = line       , refl
-overTimeAlwaysForced (mkSignal (ratio _)   _) = line       , refl
-overTimeAlwaysForced (mkSignal (state _ _) _) = stateBands , refl
+overTimeAlwaysForced (mkSignal flow        _ _) = line       , refl
+overTimeAlwaysForced (mkSignal (ratio _)   _ _) = line       , refl
+overTimeAlwaysForced (mkSignal (state _ _) _ _) = stateBands , refl
 
 -- ── L'UNICA cella sottodeterminata, esibita (onestà nel tipo) ──────────
 -- Non la mascheriamo con una scelta: il tipo dice `underdetermined`.
-flowFamilyUnderdetermined :
-  displayAt now (mkSignal flow comparable) ≡ underdetermined (number ∷ grid ∷ [])
-flowFamilyUnderdetermined = refl
+flowFamilyUnderdetermined : ∀ (t : Temporal) →
+  displayAt now (mkSignal flow comparable t) ≡ underdetermined (number ∷ grid ∷ [])
+flowFamilyUnderdetermined _ = refl
+
+-- ── La query EMERGE dalla temporalità — il payoff falsificabile ────────
+-- Un counter monotòno: rate() è l'unica lettura fedele (indipende dall'intento).
+counterIsRated : ∀ i c x → queryAt i (mkSignal c x cumulative) ≡ forced rated
+counterIsRated _ _ _ = refl
+
+-- Un counter grezzo come `line` è una menzogna: queryAt NON lo dà `raw`.
+counterNotRaw : ∀ i c x → queryAt i (mkSignal c x cumulative) ≢ forced raw
+counterNotRaw _ _ _ ()
+
+-- rate() su un gauge è un errore di tipo: queryAt NON dà `rated` su `instant`.
+gaugeNotRated : ∀ i c x → queryAt i (mkSignal c x instant) ≢ forced rated
+gaugeNotRated _ _ _ ()

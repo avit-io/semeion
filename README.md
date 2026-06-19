@@ -112,14 +112,19 @@ La distinzione che `Scalar` aveva perso è di nuovo nel tipo.
 ### L'onestà è nel tipo
 
 ```agda
-data Faithful : Set where
-  forced          : Display → Faithful        -- emerge: unico fedele
-  underdetermined : List Display → Faithful    -- la struttura non forza: menu onesto
+data Determined (A : Set) : Set where
+  forced          : A → Determined A           -- emerge: unico fedele
+  underdetermined : List A → Determined A        -- la struttura non forza: menu onesto
+
+Faithful = Determined Display                   -- il consumatore-widget
 ```
 
 Il **codominio** di `displayAt` testimonia se la scelta è emersa. Niente
 funzione parziale più teorema a lato: la disonestà sarebbe rappresentabile, e
-non lo è.
+non lo è. La dicotomia `forced | underdetermined` è **epistemica** (regime 1 vs
+3), non specifica del rendering: per questo è `Determined A`, polimorfo. Il
+segnale riduce la libertà di *ogni* consumatore a valle — non solo del widget
+(`displayAt`), ma anche della query (`queryAt`, sotto).
 
 ### L'intento è l'unica stipulazione — il K locale
 
@@ -146,6 +151,38 @@ displayAt : Intent → Signal → Faithful
 L'unica cella di gusto residua (magnitudi unbounded comparabili, *adesso*:
 lista di stat vs tabella) **non viene scelta di nascosto** — il tipo dice
 `underdetermined`.
+
+### Il secondo consumatore: la query (testimoni distribuiti)
+
+La struttura si distribuisce in modo **non uniforme** fra i consumatori: il
+**bound** (`lo ≤ v ≤ hi`) forza il *widget* (`arc`); la **monotonicità** di un
+counter forza la *query* — `rate()` è la sola lettura fedele di un counter
+monotòno. Sono due testimoni diversi nello **stesso** segnale, letti da due
+funzioni diverse. Per questo `Signal` porta anche un campo `Temporal`:
+
+```agda
+data Temporal : Set where
+  instant    : Temporal   -- gauge: il valore È già la lettura
+  cumulative : Temporal   -- counter monotòno: rate() è l'unica lettura fedele
+
+queryAt : Intent → Signal → Determined QueryShape   -- consuma `tmp`, non `cod`
+queryAt _ (mkSignal _ _ instant)    = forced raw
+queryAt _ (mkSignal _ _ cumulative) = forced rated
+```
+
+Il payoff è **falsificabile** e simmetrico al rifiuto della gauge sulla p99:
+
+```agda
+counterNotRaw : ∀ i c x → queryAt i (mkSignal c x cumulative) ≢ forced raw
+counterNotRaw _ _ _ ()      -- un counter grezzo come line è una MENZOGNA
+
+gaugeNotRated : ∀ i c x → queryAt i (mkSignal c x instant) ≢ forced rated
+gaugeNotRated _ _ _ ()      -- rate() su un gauge è un ERRORE DI TIPO
+```
+
+La **window** (`5m` vs `1m`) NON entra in `QueryShape`: è il *K locale
+lato-query* — l'analogo dell'intento per il display — un fiat fuori dal tipo,
+nominato, non mascherato.
 
 ### Il segnale richiesto: ratio / SLI
 
@@ -244,9 +281,10 @@ agda Semeion/Signal.agda     # typecheck completo: 0 postulate, --safe --without
 ```
 semeion/
 ├── Semeion/
-│   ├── Signal.agda      # Signal (Codomain · Index) · Display · Faithful ·
-│   │                    #   displayAt (il teorema) · le prove (SLI, rifiuto p99)
-│   └── Vocab.agda       # vocabolario SRE: level/sli/rate/latency/burn ·
+│   ├── Signal.agda      # Signal (Codomain · Index · Temporal) · Display ·
+│   │                    #   Determined · displayAt + queryAt (i teoremi) · le
+│   │                    #   prove (SLI, rifiuto p99, counter)
+│   └── Vocab.agda       # vocabolario SRE: level/sli/rate/latency/burn/counter ·
 │                        #   saturation & error-budget come REGIME 2 (fedeltà)
 ├── semeion.agda-lib     # depend: standard-library (radice: zero dep d'ecosistema)
 └── flake.nix            # packages.lib · lib.mkShell · devShells.default
@@ -305,12 +343,16 @@ tessitrice. Coerente con "JSON epifenomeno": semeion resta geometria pura.
 - **rifiuto del fondoscala inventato** — `displayAt now (flow, point) ≢
   forced arc`: una magnitudo unbounded **non** è una gauge. Errore di tipo,
   non convenzione.
-- **onestà nel tipo** — `Faithful` distingue `forced` da `underdetermined`.
-  La cella di gusto (`now`, `flow`, `comparable`) ritorna `underdetermined`,
-  non una scelta travestita.
+- **rifiuto della lettura grezza del counter** — `queryAt _ (… cumulative) ≢
+  forced raw` e `queryAt _ (… instant) ≢ forced rated`: un counter monotòno
+  letto grezzo come `line` è una menzogna, `rate()` su un gauge è un errore.
+  Il duale, sul lato-query, del rifiuto della gauge sulla p99.
+- **onestà nel tipo** — `Determined` distingue `forced` da `underdetermined`,
+  per *ogni* consumatore. La cella di gusto (`now`, `flow`, `comparable`)
+  ritorna `underdetermined`, non una scelta travestita.
 
-`displayAt` è **totale**, `--safe --without-K`, **zero `postulate`**, zero
-`TERMINATING`, zero `trustMe`.
+`displayAt` e `queryAt` sono **totali**, `--safe --without-K`, **zero
+`postulate`**, zero `TERMINATING`, zero `trustMe`.
 
 ### Cosa NON è garantito (onestà sopra tutto)
 
@@ -322,6 +364,9 @@ tessitrice. Coerente con "JSON epifenomeno": semeion resta geometria pura.
 - **una cella resta gusto** — `now` / `flow` / `comparable` (magnitudi
   unbounded comparabili): lista di stat vs tabella. Marcata
   `underdetermined`, non risolta di nascosto.
+- **la window non emerge** — il *quanto* del `rate()` (`5m` vs `1m`) è il K
+  locale lato-query, l'analogo dell'intento per il display: un fiat pagato al
+  sito d'uso, fuori da `QueryShape`. Nominato, non forzato.
 - **vocabolario solo [0,1]** — il *tipo* `Bounded` porta già `[lo,hi]`
   qualunque su ℚ, ma il vocabolario SRE (`Vocab`) ne usa solo l'unità [0,1]
   (SLI, saturazione, budget). Un segnale con cap noto fuori da [0,1] (es.
@@ -338,46 +383,25 @@ tessitrice. Coerente con "JSON epifenomeno": semeion resta geometria pura.
 
 In ordine di valore (regime fra parentesi):
 
-1. **Generalizzazione del consumatore — `Determined A`** *(strutturale)* —
-   `Faithful` è `Determined Display`: la dicotomia `forced | underdetermined`
-   è epistemica (regime 1 vs 3), non specifica del rendering. Il segnale riduce
-   la libertà di *ogni* consumatore a valle, non solo del widget. Estrarre
-   `Determined (A : Set)` e derivarne `queryAt : Intent → Signal → Determined
-   QueryShape` (PromQL / log) accanto a `displayAt`. La libertà residua resta
-   esibita: `underdetermined xs` *è* lo spazio di scelta onesto, non l'assenza
-   di vincolo.
-2. **Testimoni distribuiti — il `Signal` porta più prove** *(fedeltà)* — la
-   struttura si distribuisce in modo non uniforme tra i consumatori: il
-   **bound** (`lo ≤ v ≤ hi`) forza il *widget* (`arc`), la **monotonicità** di
-   un counter forza la *query* (`rate()` è la sola lettura fedele di un counter
-   monotòno). Sono due testimoni diversi nello stesso segnale. Aggiungere
-   `temporal : Temporal` al `Signal` (instant vs range vector; cumulativo vs
-   gauge; staleness / regolarità del campionamento) così che `queryAt` lo
-   consumi come `displayAt` consuma `cod`. Il payoff falsificabile è simmetrico
-   al rifiuto della gauge sulla p99: `rate()` su un gauge diventa un **errore di
-   tipo**, e un counter grezzo come `line` (senza `rate()`) è una menzogna che
-   oggi semeion non sa rifiutare. Attenzione a non reintrodurre il regime 3 di
-   nascosto — la window (`5m` vs `1m`) è gusto, il `now`/`overTime` del
-   lato-query: va in `underdetermined`, non forzata.
-3. **Algebra delle unità** *(da regime 3 a 1)* — il buco d'onestà più grave:
+1. **Algebra delle unità** *(da regime 3 a 1)* — il buco d'onestà più grave:
    `comparable` / `mixed` oggi sono enum dichiarati, non prove. Servono le
    dimensioni fisiche (tempo^a · byte^b · 1^c) con un'algebra che dimostri
    `unit s₁ ≡ unit s₂`, così che la comparabilità di due `flow` sia un
    **teorema**, non un tag. Senza, metà del giudizio `bars` vs `grid` poggia
    sul vuoto — il regime 3 travestito che semeion esiste per smascherare.
-4. **Histogram / summary come codominio** *(regime 1)* — il leaf type più ricco
+2. **Histogram / summary come codominio** *(regime 1)* — il leaf type più ricco
    di Prometheus manca del tutto: i bucket cumulativi `le` hanno una geometria
    forzata (`heatmap`, un nuovo `Display` additivo) e una regola di derivazione
    (i quantili). È l'assenza più grossa nel coprire «i segnali SRE».
-5. **Algebra dei segnali** *(regime 1)* — `Signal → Signal → Signal` chiusa
+3. **Algebra dei segnali** *(regime 1)* — `Signal → Signal → Signal` chiusa
    sotto le operazioni Prometheus (`sum`/`avg`/`histogram_quantile`/`topk`),
    con le regole di tipo: sommare due `ratio` **non** dà un `ratio` (esce da
    [0,1]); `histogram_quantile` su un istogramma dà un `flow`. Rende semeion un
    modello dei segnali *e delle loro trasformazioni*, non solo delle foglie.
-6. **Aritmetica `ℚ` piena** *(abilitante)* — `Bounded` è già su ℚ; resta da
+4. **Aritmetica `ℚ` piena** *(abilitante)* — `Bounded` è già su ℚ; resta da
    spingere ℚ dove serve davvero (quantili, medie mobili, saturazione elastica)
    senza forzare tutto nello stampo conteggio-discreto.
-7. **Adapter `Display → PanelKind`** *(lato Penelope)* — la mappa `arc↦Gauge`,
+5. **Adapter `Display → PanelKind`** *(lato Penelope)* — la mappa `arc↦Gauge`,
    `bars↦BarGauge`, `number↦Stat`, `line↦TimeSeries`, `stateBands↦StatusHistory`,
    `grid↦Table` (+ `heatmap↦Heatmap`), coi `FieldConfig`/`Viz` derivati come
    corollari (la soglia SLO dell'arco *è* un corollario di "target nel dominio
@@ -385,12 +409,24 @@ In ordine di valore (regime fra parentesi):
 
 ### Già implementato
 
+- **Consumatore generalizzato — `Determined A`** *(strutturale)* — `Faithful =
+  Determined Display`: la dicotomia `forced | underdetermined` è epistemica
+  (regime 1 vs 3), non specifica del rendering. Nasce con due consumatori, non
+  uno: `displayAt` (widget) e `queryAt` (query).
+- **Testimoni distribuiti — `Temporal` nel `Signal`** *(fedeltà)* — il bound
+  forza il widget, la **monotonicità** forza la query. `queryAt` consuma `tmp`
+  come `displayAt` consuma `cod`: un counter (`cumulative`) ⇒ `rate()`, un
+  gauge (`instant`) ⇒ lettura grezza. Payoff falsificabile simmetrico alla p99:
+  `rate()` su un gauge è un **errore di tipo**, un counter grezzo come `line`
+  una menzogna (`counterNotRaw`, `gaugeNotRated`, `refl`/`()`). La window resta
+  il K lato-query, nominato.
 - **Bounds generali `[lo,hi]` su ℚ** (`Bounded`) — oltre [0,1], col testimone
   `lo ≤ v ≤ hi` incorporato. Il caso unità emerge da `n ≤ d` (`inUnit`, regime
   1, il `m≤m+n` dell'SLI ora su ℚ); zero `postulate`.
 - **Vocabolario SRE** (`Semeion/Vocab.agda`) — `level`, `rate`,
-  `latencyQuantile`, `burnRate`, `sli` come osservabili con regime di
-  boundedness incorporato. `saturation` ed `errorBudget` sono i casi
+  `latencyQuantile`, `burnRate`, `sli`, `counter` come osservabili con regime di
+  boundedness e temporalità incorporati (`counter` è `cumulative`: la sua query
+  fedele è `rate()`, `counterQueryRated`). `saturation` ed `errorBudget` sono i casi
   **regime 2**: bounded solo sotto un'ipotesi falsificabile (`usage ≤
   capacity`, `bad ≤ budget`) fornita dall'operatore; senza, sono `flow` e la
   gauge è rifiutata. Il contrasto regime 1 (SLI, `m≤m+n`) vs regime 2
